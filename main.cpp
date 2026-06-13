@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <cmath>
 
 #include "LibConstFunc.h"
 #include "CalcTrajectory.h"
@@ -27,7 +28,7 @@ int main()
 	inits.v_n0 = 20.0;				//скорость носителя, м/с	
 	inits.x_g_pusk = 0.0;				//координата пуска (начальная координата носителя и ракеты), м
 	inits.y_g_pusk = 0.0;				//координата пуска (начальная координата носителя и ракеты), м
-	inits.Theta_r0 = nan("") / deg; //угол направления вектора скорости ракеты, рад {если NaN, то определяется методом наведения}	
+	inits.Theta_r0 = std::nan(""); //угол направления вектора скорости ракеты, рад {если NaN, то определяется методом наведения}	
     inits.v_r0 = 1000.0;				//скорость ракеты, м/с
 
 	LimitConditions limits;			//Ограничения
