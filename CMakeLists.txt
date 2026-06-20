@@ -15,6 +15,8 @@ add_executable(laba_pro
     LibConstFunc.h
     CalcTrajectory.h
     CalcTrajectory.cpp
+    Atmosphere.cpp
+    Atmosphere.h
 )
 
 include(GNUInstallDirs)
