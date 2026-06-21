@@ -30,4 +30,16 @@ double GetBetaInf(double d);
 // Функция вычисления Beta в зависимости от массы топлива m_T диаметра d
 double GetBeta(double d);
 
+// Вспомогательная функция A(M)
+double GetA(double M);
+
+// Вспомогательная функция sigma(M)
+double GetSigmaM(double M);
+
+// Функция расчета коэффициента донного сопротивления c_x_bot_cyl(M)
+double GetCXBotCyl(double M);
+
+// Функция расчета коэффициента лобового сопротивления c_x
+double GetCX(double cx0_pas, double M, double P, double S_a, double S_m);
+
 #endif // MISSILEAERODYNAMICS_H
