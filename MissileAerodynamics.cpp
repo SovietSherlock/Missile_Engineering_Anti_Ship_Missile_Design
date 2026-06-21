@@ -93,3 +93,73 @@ double GetBeta(double d){
     double beta = K_beta * (1/m_T) + beta_inf;
 
 }
+
+double GetA(double M) {
+    // Расчет значения вспомогательной функции A(M)
+    double val = M * M - 1.0;
+    double sign_val = static_cast<double>(sign(val));
+    return  sign_val * std::sqrt(std::abs(val));
+}
+
+double GetSigmaM(double M) {
+    // Расчет значения вспомогательной функции sigma(M)
+    return 1.0 / (1.0 + std::exp(-M));
+}
+
+double GetCXBotCyl(double M) {
+    // Расчет коэффициента донного сопротивления c_x_bot_cyl(M)
+
+
+    // Промежуточные переменные A(M) и sigma(M)
+    double A = GetA(M);
+    double sig = GetSigmaM(M);
+
+    // Система условий
+    if (M <= 0.723672) {
+        double inner = 1.410839 + 1.0432458 * A + 1.167756 * std::pow(A, 2.0) + 0.43818533 * std::pow(A, 3.0);
+        return std::log(inner);
+    }
+    else if (M > 0.723672 && M <= 0.949985) {
+        double power = -1.1994635 + 4.1244161 * A + 5.4425535 * std::pow(A, 2.0) + 2.6464556 * std::pow(A, 3.0);
+        return std::exp(power);
+    }
+    else if (M > 0.949985 && M <= 1.045254) {
+        double inner = 1508.25 - 6119.1935 * std::pow(M, -1.0) + 9304.258 * std::pow(M, -2.0) 
+                       - 6277.8414 * std::pow(M, -3.0) + 1585.749 * std::pow(M, -4.0);
+        return std::log(inner);
+    }
+    else if (M > 1.045254 && M <= 1.335822) {
+        double power = -78.455781 + 249.63042 * M - 302.51885 * std::pow(M, 2.0) 
+                       + 162.4847 * std::pow(M, 3.0) - 32.690523 * std::pow(M, 4.0);
+        return std::exp(power);
+    }
+    else if (M > 1.335822 && M <= 3.74289) {
+        double arg = 4.6685604 - 15.483104 * sig + 18.393009 * std::pow(sig, 2.0) - 7.5350128 * std::pow(sig, 3.0);
+        return std::tan(arg);
+    }
+    else {
+        double term1 = 1.43 / std::pow(M, 2.0);
+        double term2 = (0.772 / std::pow(M, 2.0)) * std::pow(1.0 - 0.011 * std::pow(M, 2.0), 3.5);
+        return term1 - term2;
+    }
+}
+
+double GetCX (double cx0_pas, double M, double P, double S_a, double S_m) {
+    // Расчет коэффициента лобового сопротивления 
+    double cx0_bot_cyl = GetCXBotCyl(M);
+
+    // 2. Предотвращаем деление на ноль, если площадь миделя передана некорректно
+    if (S_m <= 0.0) return cx0_pas;
+
+    // 3. Вычисляем компоненты по твоим встроенным функциям из LibConstFunc.h
+    double sign_P = static_cast<double>(sign(P));     // Функция знака sgn(P)
+    double heaviside_P = static_cast<double>(H(P));   // Функция Хевисайда H(P)
+
+    // 4. Считаем по точной формуле: c_x = c_x_pas - c_x_0_дн * (S_a / S_m) * sgn(P) * H(P)
+    double cx_total = cx0_pas - cx0_bot_cyl * (S_a / S_m) * sign_P * heaviside_P;
+
+    // Физическая защита: полный коэффициент сопротивления не может стать отрицательным
+    if (cx_total < 0.02) cx_total = 0.02;
+
+    return cx_total;
+};
