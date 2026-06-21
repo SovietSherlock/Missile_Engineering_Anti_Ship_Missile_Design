@@ -93,7 +93,7 @@ int main()
 	MethodData.C = nan("");				//коэффициент в методе "С" (для метода BeamRiding_ConstAlignment)
 	MethodData.m = nan("");				//коэффициент в методе спрямления (для метода BeamRiding_Alignment)
 
-	//Объявляем структуру для резульата
+	//Объявляем структуру для результата
 	vector<TrajectoryParameters> result;
 
 	string resultCode;
