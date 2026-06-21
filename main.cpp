@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <numbers> 
 
 #include "LibConstFunc.h"
 #include "CalcTrajectory.h"
@@ -46,7 +47,8 @@ int main()
 	inits.length = 4.10;           // Длина ракеты, м
 	// Расчет калибра ракеты через плотности отсеков:
 	double rho_construct = 1100.0;          // Физическая суммарная средняя плотность компонентов отсеков, кг/м^3
-	double V_construct = inits.m_missile_0/rho_construct;            // объем корпуса ракеты, м^3
+	double pi = std::acos(-1.0);
+	inits.diameter = std::round(std::sqrt(4.0 * inits.m_missile_0 / (inits.length*rho_construct*pi))*100.0)/100.0; // калибр ракеты, м
 
 	LimitConditions limits;			//Ограничения
     limits.n_ya_r_max = 40.0;       //максимальная перегрузка ракеты

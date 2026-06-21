@@ -17,6 +17,8 @@ add_executable(laba_pro
     CalcTrajectory.cpp
     Atmosphere.cpp
     Atmosphere.h
+    MissileAerodynamics.h
+    MissileAerodynamics.cpp
 )
 
 include(GNUInstallDirs)
