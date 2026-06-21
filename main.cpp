@@ -45,10 +45,12 @@ int main()
 	inits.m_missile_0 = 650.0;	   // Стартовая масса ракеты, кг
 	inits.m_warhead = 150.0;	   // Масса боевой части, кг
 	inits.length = 4.10;           // Длина ракеты, м
-	// Расчет калибра ракеты через плотности отсеков:
 	double rho_construct = 1100.0;          // Физическая суммарная средняя плотность компонентов отсеков, кг/м^3
 	double pi = std::acos(-1.0);
 	inits.diameter = std::round(std::sqrt(4.0 * inits.m_missile_0 / (inits.length*rho_construct*pi))*100.0)/100.0; // калибр ракеты, м
+	inits.S_m = inits.m_missile_0/(inits.length*rho_construct); // площадь миделя (поперечного сечения ракеты), м^2
+	inits.S_a = 0.8*(inits.m_missile_0/(inits.length*rho_construct)); // площадь выходного поперечного сечения сопла, м^2
+
 
 	LimitConditions limits;			//Ограничения
     limits.n_ya_r_max = 40.0;       //максимальная перегрузка ракеты

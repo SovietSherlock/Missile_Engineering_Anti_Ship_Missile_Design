@@ -1,6 +1,9 @@
 #include "MissileAerodynamics.h"
-#include "LibConstFunc.h" // Подключаем ради функции Linterp
+#include "LibConstFunc.h" 
+#include "Atmosphere.h"
+#include <cmath>
 #include <vector>
+
 
 AeroCoefficients GetAerodynamics(double M) {
     AeroCoefficients aero;
@@ -44,4 +47,49 @@ AeroCoefficients GetAerodynamics(double M) {
     aero.alpha_delta_bal = Linterp(table_bal, M, 1, 0);
 
     return aero;
+}
+
+double GetEngineMass(){
+    // Расчет массы топлива m_T
+    double m_T;
+
+    return m_T;
+}
+
+double GetKLambda(double d) {
+    // Расчет коэффициента K_lambda(d)
+    double denominator = std::pow(0.352105 * d, 3.044364);
+    double exp_part = std::pow(0.9, -0.5 * d);
+    double K_lambda = 4.388157e-5 * (1.0 / denominator) * exp_part;
+
+    return K_lambda;
+}
+
+double GetEngineLambda(double d) {
+    // Расчет длины двигательного отсека lambda(m_T, d)
+    double K_lambda = GetKLambda(d);
+    double m_T = GetEngineMass();
+    return K_lambda * m_T;
+}
+
+double GetKBeta(double d){
+    // Расчет коэффициента K_beta(d)
+    double K_beta = 21.423397 * std::pow(1.605279 * d, 2.817663) + 0.079;
+    return K_beta;
+}
+
+double GetBetaInf(double d){
+    // Расчет коэффициента beta_infinity(d)
+    double exp_part = std::pow(0.436906 * d, 0.107262);
+    double beta_inf = 0.10013/exp_part + 1;
+    return beta_inf;
+}
+
+double GetBeta(double d){
+    // Расчет коэффициента beta(m_T, d)
+    double K_beta = GetKBeta(d);
+    double beta_inf = GetBetaInf(d);
+    double m_T = GetEngineMass();
+    double beta = K_beta * (1/m_T) + beta_inf;
+
 }
