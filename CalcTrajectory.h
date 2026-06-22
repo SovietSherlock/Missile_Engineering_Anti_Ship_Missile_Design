@@ -3,17 +3,22 @@
 
 #include <vector>
 #include <string>
-
 #include "DataStructs.h"
 
-std::string CalcTrajectory_Euler(const CalcParameters& CalcParameters,
+enum class TrajectoryMode {
+    EWT,      // Энергетически выгодная траектория
+    GORKA     // С манёвром «горка» на конечном участке
+};
+
+std::string CalcTrajectory_Euler(
+    const CalcParameters& calcParams,
     const InitConditions& inits,
     const LimitConditions& limits,
-    const C_Data& Cdata,
-    const N_Data& Ndata,
-    const R_Data& Rdata,
-    const GuidanceMethod_Data& MethodData,
+    const C_Data& cdata,
+    const N_Data& ndata,
+    const R_Data& rdata,
+    const GuidanceMethod_Data& methodData,
+    TrajectoryMode mode,
     std::vector<TrajectoryParameters>& result);
-
 
 #endif // CALCTRAJECTORY_H
