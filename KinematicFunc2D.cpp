@@ -66,6 +66,8 @@ double epsilon(double x_g_r, double y_g_r, double x_g_c, double y_g_c)
 
 	else if ((x_g_c == x_g_r) && (y_g_c < y_g_r))
 		return -pi / 2.0;
+
+	return 0.0;
 }
 
 /// Функция для вычисления угловой скорости линии визирования между двумя точками
