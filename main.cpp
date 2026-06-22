@@ -370,7 +370,9 @@ TrajectoryResult runTrajectoryCalculation(
     double K_P,
     double K_g,
     double m_norm,
-    double switch_time)
+    double switch_time,
+    GuidanceMethod method,
+    double k)
 {
     TrajectoryResult result;
     result.is_success = false;
@@ -378,8 +380,8 @@ TrajectoryResult runTrajectoryCalculation(
     result.flight_time = 0.0;
 
     GuidanceMethod_Data methodData;
-    methodData.Method = GuidanceMethod::EVT;
-    methodData.k = 3.0;
+    methodData.Method = method;
+    methodData.k = k;
     methodData.K_g = K_g;
 
     std::vector<TrajectoryParameters> s;
@@ -410,9 +412,9 @@ TrajectoryResult runTrajectoryCalculation(
 }
 
 // ============================================================================
-// ФУНКЦИЯ ДЛЯ СКАНИРОВАНИЯ ПАРАМЕТРОВ И ПОИСКА МАКСИМУМА ДЛЯ ВСЕХ МЕТОДОВ
+// ФУНКЦИЯ ДЛЯ СКАНИРОВАНИЯ ПАРАМЕТРОВ И ПОИСКА МАКСИМУМА
 // ============================================================================
-void scanAndOptimizeAllMethods(
+void scanAndOptimize(
     const CalcParameters& calcParams,
     const InitConditions& inits,
     const LimitConditions& limits,
@@ -420,154 +422,142 @@ void scanAndOptimizeAllMethods(
     const N_Data& NData,
     const R_Data& RData,
     const RocketParams& rocket,
-    double K_g = 2.0,
+    const std::string& scenario_name,
+    GuidanceMethod method,
+    double k,
     double m_norm = 0.0,
-    double switch_time = 0.0)
+    double switch_time = 0.0,
+    double y_opt = 10000.0)
 {
-    // Список методов для сканирования
-    struct MethodConfig {
-        GuidanceMethod method;
-        std::string name;
-        double k;  // параметр k для метода
-    };
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "  СЦЕНАРИЙ: " << scenario_name << std::endl;
+    std::cout << "  Метод: " << (method == GuidanceMethod::EVT ? "EVT" : "GORKA") << std::endl;
+    std::cout << "========================================" << std::endl;
     
-    std::vector<MethodConfig> methods = {
-        {GuidanceMethod::EVT, "EVT", 3.0},
-        {GuidanceMethod::Gorka, "GORKA", 3.0}
-        // Добавьте другие методы, если они есть
-    };
+    // Диапазоны параметров
+    const int MU_STEPS = 10;
+    const int ETA_STEPS = 10;
+    const int KM_STEPS = 5;
+    const int KP_STEPS = 5;
+    const int KG_STEPS = 5;
     
-    // Для каждого метода выполняем сканирование
-    for (const auto& method : methods)
+    const double MU_MIN = 0.1;
+    const double MU_MAX = 0.6;
+    const double ETA_MIN = 10.0;
+    const double ETA_MAX = 80.0;
+    const double KM_MIN = 0.0;      // ИЗМЕНЕНО: от 0 до 5
+    const double KM_MAX = 5.0;      // ИЗМЕНЕНО: от 0 до 5
+    const double KP_MIN = 0.05;
+    const double KP_MAX = 1.0;
+    const double KG_MIN = 1.0;      // ДОБАВЛЕНО: варьирование K_g
+    const double KG_MAX = 2.0;      // ДОБАВЛЕНО: варьирование K_g
+
+    // Открываем файлы с учётом сценария
+    std::string prefix = scenario_name;
+    std::ofstream heatmap_file(prefix + "_range_heatmap.dat");
+    std::ofstream curves_file(prefix + "_range_curves.dat");
+    std::ofstream full_data_file(prefix + "_range_full_data.dat");
+    std::ofstream best_params_file(prefix + "_best_parameters.txt");
+    
+    if (!heatmap_file.is_open() || !curves_file.is_open() || 
+        !full_data_file.is_open() || !best_params_file.is_open())
     {
-        std::cout << "\n========================================" << std::endl;
-        std::cout << "  СКАНИРОВАНИЕ ДЛЯ МЕТОДА: " << method.name << std::endl;
-        std::cout << "========================================" << std::endl;
-        
-        // Диапазоны параметров
-        const int MU_STEPS = 15;
-        const int ETA_STEPS = 15;
-        const int KM_STEPS = 8;
-        const int KP_STEPS = 8;
-        
-        const double MU_MIN = 0.1;
-        const double MU_MAX = 0.6;
-        const double ETA_MIN = 10.0;
-        const double ETA_MAX = 80.0;
-        const double KM_MIN = 1.0;
-        const double KM_MAX = 10.0;
-        const double KP_MIN = 0.05;
-        const double KP_MAX = 1.0;
+        std::cerr << "❌ Не удалось создать файлы для записи" << std::endl;
+        return;
+    }
 
-        // Открываем файлы с учётом метода
-        std::string prefix = method.name;
-        std::ofstream heatmap_file(prefix + "_range_heatmap.dat");
-        std::ofstream curves_file(prefix + "_range_curves.dat");
-        std::ofstream full_data_file(prefix + "_range_full_data.dat");
-        std::ofstream best_params_file(prefix + "_best_parameters.txt");
+    // Заголовки
+    heatmap_file << "# Карта дальностей для сценария " << scenario_name << std::endl;
+    heatmap_file << "# Метод: " << (method == GuidanceMethod::EVT ? "EVT" : "GORKA") << std::endl;
+    heatmap_file << "# Формат: mu eta max_range_km" << std::endl;
+    
+    curves_file << "# Кривые максимальной дальности для сценария " << scenario_name << std::endl;
+    curves_file << "# Формат: mu max_range_km eta_opt Km_opt Kp_opt Kg_opt" << std::endl;
+
+    full_data_file << "# Полные данные сканирования для сценария " << scenario_name << std::endl;
+    full_data_file << "# Формат: mu eta Km Kp Kg range_km" << std::endl;
+
+    best_params_file << "ОПТИМАЛЬНЫЕ ПАРАМЕТРЫ ДЛЯ СЦЕНАРИЯ " << scenario_name << std::endl;
+    best_params_file << "Метод: " << (method == GuidanceMethod::EVT ? "EVT" : "GORKA") << std::endl;
+    best_params_file << "================================================" << std::endl;
+
+    std::cout << "\nПараметры сканирования:" << std::endl;
+    std::cout << "  mu: [" << MU_MIN << ", " << MU_MAX << "] (" << MU_STEPS << " точек)" << std::endl;
+    std::cout << "  eta: [" << ETA_MIN << ", " << ETA_MAX << "] (" << ETA_STEPS << " точек)" << std::endl;
+    std::cout << "  K_m: [" << KM_MIN << ", " << KM_MAX << "] (" << KM_STEPS << " точек)" << std::endl;
+    std::cout << "  K_P: [" << KP_MIN << ", " << KP_MAX << "] (" << KP_STEPS << " точек)" << std::endl;
+    std::cout << "  K_g: [" << KG_MIN << ", " << KG_MAX << "] (" << KG_STEPS << " точек)" << std::endl;
+    
+    int total = MU_STEPS * ETA_STEPS * KM_STEPS * KP_STEPS * KG_STEPS;
+    std::cout << "  Всего расчётов: " << total << std::endl;
+
+    int completed = 0;
+    int success_count = 0;
+
+    // Массивы для хранения результатов
+    std::map<std::pair<double, double>, double> max_range_for_mu_eta;
+    std::map<std::pair<double, double>, std::tuple<double, double, double, double>> best_params_for_mu_eta;
+    std::map<double, double> max_range_for_mu;
+    std::map<double, std::tuple<double, double, double, double, double>> best_params_for_mu;
+
+    // Для глобального максимума
+    double global_max_range = 0.0;
+    double global_mu = 0.0;
+    double global_eta = 0.0;
+    double global_Km = 0.0;
+    double global_Kp = 0.0;
+    double global_Kg = 0.0;
+    TrajectoryResult global_best_result;
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    for (int i = 0; i < MU_STEPS; ++i)
+    {
+        double mu = MU_MIN + i * (MU_MAX - MU_MIN) / (MU_STEPS - 1);
         
-        if (!heatmap_file.is_open() || !curves_file.is_open() || 
-            !full_data_file.is_open() || !best_params_file.is_open())
+        for (int j = 0; j < ETA_STEPS; ++j)
         {
-            std::cerr << "❌ Не удалось создать файлы для записи" << std::endl;
-            continue;
-        }
-
-        // Заголовки
-        heatmap_file << "# Карта дальностей для метода " << method.name << std::endl;
-        heatmap_file << "# Формат: mu eta max_range_km" << std::endl;
-        
-        curves_file << "# Кривые максимальной дальности для метода " << method.name << std::endl;
-        curves_file << "# Формат: mu max_range_km eta_opt Km_opt Kp_opt" << std::endl;
-
-        full_data_file << "# Полные данные сканирования для метода " << method.name << std::endl;
-        full_data_file << "# Формат: mu eta Km Kp range_km" << std::endl;
-
-        best_params_file << "ОПТИМАЛЬНЫЕ ПАРАМЕТРЫ ДЛЯ МЕТОДА " << method.name << std::endl;
-        best_params_file << "================================================" << std::endl;
-
-        std::cout << "\nПараметры сканирования для " << method.name << ":" << std::endl;
-        std::cout << "  mu: [" << MU_MIN << ", " << MU_MAX << "] (" << MU_STEPS << " точек)" << std::endl;
-        std::cout << "  eta: [" << ETA_MIN << ", " << ETA_MAX << "] (" << ETA_STEPS << " точек)" << std::endl;
-        std::cout << "  K_m: [" << KM_MIN << ", " << KM_MAX << "] (" << KM_STEPS << " точек)" << std::endl;
-        std::cout << "  K_P: [" << KP_MIN << ", " << KP_MAX << "] (" << KP_STEPS << " точек)" << std::endl;
-        std::cout << "  K_g = " << K_g << " (фиксирован)" << std::endl;
-        
-        int total = MU_STEPS * ETA_STEPS * KM_STEPS * KP_STEPS;
-        std::cout << "  Всего расчётов: " << total << std::endl;
-
-        int completed = 0;
-        int success_count = 0;
-
-        // Массивы для хранения результатов
-        std::map<std::pair<double, double>, double> max_range_for_mu_eta;
-        std::map<std::pair<double, double>, std::tuple<double, double, double>> best_params_for_mu_eta;
-        std::map<double, double> max_range_for_mu;
-        std::map<double, std::tuple<double, double, double, double>> best_params_for_mu;
-
-        // Для глобального максимума
-        double global_max_range = 0.0;
-        double global_mu = 0.0;
-        double global_eta = 0.0;
-        double global_Km = 0.0;
-        double global_Kp = 0.0;
-        TrajectoryResult global_best_result;
-
-        auto start_time = std::chrono::high_resolution_clock::now();
-
-        for (int i = 0; i < MU_STEPS; ++i)
-        {
-            double mu = MU_MIN + i * (MU_MAX - MU_MIN) / (MU_STEPS - 1);
+            double eta = ETA_MIN + j * (ETA_MAX - ETA_MIN) / (ETA_STEPS - 1);
             
-            for (int j = 0; j < ETA_STEPS; ++j)
+            double best_range_for_pair = 0.0;
+            double best_Km_for_pair = 0.0;
+            double best_Kp_for_pair = 0.0;
+            double best_Kg_for_pair = 0.0;
+
+            for (int k = 0; k < KM_STEPS; ++k)
             {
-                double eta = ETA_MIN + j * (ETA_MAX - ETA_MIN) / (ETA_STEPS - 1);
+                double Km = KM_MIN + k * (KM_MAX - KM_MIN) / (KM_STEPS - 1);
                 
-                double best_range_for_pair = 0.0;
-                double best_Km_for_pair = 0.0;
-                double best_Kp_for_pair = 0.0;
-
-                for (int k = 0; k < KM_STEPS; ++k)
+                for (int l = 0; l < KP_STEPS; ++l)
                 {
-                    double Km = KM_MIN + k * (KM_MAX - KM_MIN) / (KM_STEPS - 1);
+                    double Kp = KP_MIN + l * (KP_MAX - KP_MIN) / (KP_STEPS - 1);
                     
-                    for (int l = 0; l < KP_STEPS; ++l)
+                    for (int m = 0; m < KG_STEPS; ++m)
                     {
-                        double Kp = KP_MIN + l * (KP_MAX - KP_MIN) / (KP_STEPS - 1);
+                        double Kg = KG_MIN + m * (KG_MAX - KG_MIN) / (KG_STEPS - 1);
                         
-                        // Используем текущий метод
-                        GuidanceMethod_Data methodData;
-                        methodData.Method = method.method;
-                        methodData.k = method.k;
-                        methodData.K_g = K_g;
-
-                        std::vector<TrajectoryParameters> s;
-                        std::string resCode = CalcTrajectory_DZ(
+                        TrajectoryResult result = runTrajectoryCalculation(
                             calcParams, inits, limits,
                             CData, NData, RData,
-                            methodData,
                             rocket,
-                            mu, eta, Km, Kp, K_g,
-                            s,
-                            m_norm,
-                            switch_time
+                            mu, eta, Km, Kp, Kg,
+                            m_norm, switch_time,
+                            method, k
                         );
 
                         completed++;
-                        double range_km = 0.0;
+                        double range_km = result.range_km;
                         
-                        if (resCode == "0" && !s.empty())
+                        if (result.is_success)
                         {
-                            double x_start = s.front().x_g_r;
-                            double x_end = s.back().x_g_r;
-                            range_km = (x_end - x_start) / 1000.0;
                             success_count++;
                         }
 
                         // Сохраняем полные данные
                         full_data_file << std::setprecision(6) 
                                        << mu << "\t" << eta << "\t" 
-                                       << Km << "\t" << Kp << "\t" << range_km << "\n";
+                                       << Km << "\t" << Kp << "\t" 
+                                       << Kg << "\t" << range_km << "\n";
 
                         // Обновляем лучшую дальность для пары (mu, eta)
                         if (range_km > best_range_for_pair)
@@ -575,26 +565,23 @@ void scanAndOptimizeAllMethods(
                             best_range_for_pair = range_km;
                             best_Km_for_pair = Km;
                             best_Kp_for_pair = Kp;
+                            best_Kg_for_pair = Kg;
                         }
 
                         // Обновляем глобальный максимум
-                        if (range_km > global_max_range)
+                        if (range_km > global_max_range && result.is_success)
                         {
                             global_max_range = range_km;
                             global_mu = mu;
                             global_eta = eta;
                             global_Km = Km;
                             global_Kp = Kp;
-                            // Сохраняем результат
-                            global_best_result.is_success = (resCode == "0" && !s.empty());
-                            global_best_result.trajectory = s;
-                            global_best_result.range_km = range_km;
-                            global_best_result.flight_time = s.empty() ? 0.0 : s.back().t;
-                            global_best_result.result_code = resCode;
+                            global_Kg = Kg;
+                            global_best_result = result;
                         }
 
                         // Прогресс
-                        if (completed % 200 == 0 || completed == total)
+                        if (completed % 1000 == 0 || completed == total)
                         {
                             auto current_time = std::chrono::high_resolution_clock::now();
                             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(current_time - start_time).count();
@@ -609,105 +596,149 @@ void scanAndOptimizeAllMethods(
                         }
                     }
                 }
+            }
 
-                // Сохраняем лучшую дальность для пары (mu, eta)
-                auto key = std::make_pair(mu, eta);
-                max_range_for_mu_eta[key] = best_range_for_pair;
-                best_params_for_mu_eta[key] = std::make_tuple(best_Km_for_pair, best_Kp_for_pair, best_range_for_pair);
+            // Сохраняем лучшую дальность для пары (mu, eta)
+            auto key = std::make_pair(mu, eta);
+            max_range_for_mu_eta[key] = best_range_for_pair;
+            best_params_for_mu_eta[key] = std::make_tuple(best_Km_for_pair, best_Kp_for_pair, best_Kg_for_pair, best_range_for_pair);
 
-                // Обновляем лучшую дальность для mu
-                if (best_range_for_pair > max_range_for_mu[mu])
-                {
-                    max_range_for_mu[mu] = best_range_for_pair;
-                    best_params_for_mu[mu] = std::make_tuple(eta, best_Km_for_pair, best_Kp_for_pair, best_range_for_pair);
-                }
+            // Обновляем лучшую дальность для mu
+            if (best_range_for_pair > max_range_for_mu[mu])
+            {
+                max_range_for_mu[mu] = best_range_for_pair;
+                best_params_for_mu[mu] = std::make_tuple(eta, best_Km_for_pair, best_Kp_for_pair, best_Kg_for_pair, best_range_for_pair);
             }
         }
+    }
 
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto total_time = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto total_time = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
 
-        // Записываем карту дальностей
-        for (const auto& item : max_range_for_mu_eta)
+    // Записываем карту дальностей
+    for (const auto& item : max_range_for_mu_eta)
+    {
+        double mu = item.first.first;
+        double eta = item.first.second;
+        double range = item.second;
+        heatmap_file << std::setprecision(6) << mu << "\t" << eta << "\t" << range << "\n";
+    }
+
+    // Записываем кривые максимальной дальности
+    for (const auto& item : max_range_for_mu)
+    {
+        double mu = item.first;
+        double range = item.second;
+        auto params = best_params_for_mu[mu];
+        double eta_opt = std::get<0>(params);
+        double Km_opt = std::get<1>(params);
+        double Kp_opt = std::get<2>(params);
+        double Kg_opt = std::get<3>(params);
+        curves_file << std::setprecision(6) << mu << "\t" << range << "\t" 
+                    << eta_opt << "\t" << Km_opt << "\t" << Kp_opt << "\t" << Kg_opt << "\n";
+    }
+
+    heatmap_file.close();
+    curves_file.close();
+    full_data_file.close();
+
+    // ========================================================================
+    // ВЫВОД РЕЗУЛЬТАТОВ ДЛЯ СЦЕНАРИЯ
+    // ========================================================================
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "  РЕЗУЛЬТАТЫ ДЛЯ СЦЕНАРИЯ: " << scenario_name << std::endl;
+    std::cout << "========================================" << std::endl;
+    std::cout << "Всего расчётов:      " << total << std::endl;
+    std::cout << "Успешных встреч:     " << success_count << std::endl;
+    std::cout << "Успешность:          " << std::fixed << std::setprecision(1) 
+              << (double)success_count / total * 100 << "%" << std::endl;
+    std::cout << "Время выполнения:    " << total_time << " с" << std::endl;
+
+    std::cout << "\n  ★ МАКСИМУМ ДАЛЬНОСТИ ★" << std::endl;
+    std::cout << "  Дальность:          " << std::setprecision(2) << global_max_range << " км" << std::endl;
+    std::cout << "  Время полёта:       " << global_best_result.flight_time << " с" << std::endl;
+    std::cout << "\n  Оптимальные параметры:" << std::endl;
+    std::cout << "    μ  = " << std::setprecision(4) << global_mu << std::endl;
+    std::cout << "    η  = " << std::setprecision(2) << global_eta << std::endl;
+    std::cout << "    K_m = " << std::setprecision(3) << global_Km << std::endl;
+    std::cout << "    K_P = " << std::setprecision(4) << global_Kp << std::endl;
+    std::cout << "    K_g = " << std::setprecision(3) << global_Kg << std::endl;
+
+    // Вывод координат встречи
+    if (global_best_result.is_success && !global_best_result.trajectory.empty())
+    {
+        const auto& last = global_best_result.trajectory.back();
+        std::cout << "\n  Параметры встречи:" << std::endl;
+        std::cout << "    x_g = " << std::setprecision(2) << last.x_g_r << " м" << std::endl;
+        std::cout << "    y_g = " << last.y_g_r << " м" << std::endl;
+        std::cout << "    v_r = " << last.v_r << " м/с" << std::endl;
+        std::cout << "    Θ_r = " << last.Theta_r * 180.0 / PI << "°" << std::endl;
+        std::cout << "    r_rc = " << last.r_rc << " м" << std::endl;
+        
+        if (last.mass_r > 0.0)
         {
-            double mu = item.first.first;
-            double eta = item.first.second;
-            double range = item.second;
-            heatmap_file << std::setprecision(6) << mu << "\t" << eta << "\t" << range << "\n";
-        }
-
-        // Записываем кривые максимальной дальности
-        for (const auto& item : max_range_for_mu)
-        {
-            double mu = item.first;
-            double range = item.second;
-            auto params = best_params_for_mu[mu];
-            double eta_opt = std::get<0>(params);
-            double Km_opt = std::get<1>(params);
-            double Kp_opt = std::get<2>(params);
-            curves_file << std::setprecision(6) << mu << "\t" << range << "\t" 
-                        << eta_opt << "\t" << Km_opt << "\t" << Kp_opt << "\n";
-        }
-
-        heatmap_file.close();
-        curves_file.close();
-        full_data_file.close();
-
-        // ========================================================================
-        // ВЫВОД РЕЗУЛЬТАТОВ ДЛЯ МЕТОДА
-        // ========================================================================
-        std::cout << "\n========================================" << std::endl;
-        std::cout << "  РЕЗУЛЬТАТЫ ДЛЯ МЕТОДА: " << method.name << std::endl;
-        std::cout << "========================================" << std::endl;
-        std::cout << "Всего расчётов:      " << total << std::endl;
-        std::cout << "Успешных встреч:     " << success_count << std::endl;
-        std::cout << "Успешность:          " << std::fixed << std::setprecision(1) 
-                  << (double)success_count / total * 100 << "%" << std::endl;
-        std::cout << "Время выполнения:    " << total_time << " с" << std::endl;
-
-        std::cout << "\n  ★ МАКСИМУМ ДАЛЬНОСТИ ДЛЯ " << method.name << " ★" << std::endl;
-        std::cout << "  Дальность:          " << std::setprecision(2) << global_max_range << " км" << std::endl;
-        std::cout << "  Время полёта:       " << global_best_result.flight_time << " с" << std::endl;
-        std::cout << "\n  Оптимальные параметры:" << std::endl;
-        std::cout << "    μ  = " << std::setprecision(4) << global_mu << std::endl;
-        std::cout << "    η  = " << std::setprecision(2) << global_eta << std::endl;
-        std::cout << "    K_m = " << std::setprecision(3) << global_Km << std::endl;
-        std::cout << "    K_P = " << std::setprecision(4) << global_Kp << std::endl;
-        std::cout << "    K_g = " << K_g << " (фиксирован)" << std::endl;
-
-        // Запись в файл лучших параметров
-        best_params_file << "\nМАКСИМУМ ДАЛЬНОСТИ" << std::endl;
-        best_params_file << "==============================" << std::endl;
-        best_params_file << "Дальность:          " << std::fixed << std::setprecision(2) 
-                         << global_max_range << " км" << std::endl;
-        best_params_file << "Время полёта:       " << global_best_result.flight_time << " с" << std::endl;
-        best_params_file << "\nОптимальные параметры:" << std::endl;
-        best_params_file << "  μ  = " << std::setprecision(4) << global_mu << std::endl;
-        best_params_file << "  η  = " << std::setprecision(2) << global_eta << std::endl;
-        best_params_file << "  K_m = " << std::setprecision(3) << global_Km << std::endl;
-        best_params_file << "  K_P = " << std::setprecision(4) << global_Kp << std::endl;
-        best_params_file << "  K_g = " << K_g << " (фиксирован)" << std::endl;
-        best_params_file.close();
-
-        // Сохраняем оптимальную траекторию для метода
-        if (global_best_result.is_success && !global_best_result.trajectory.empty())
-        {
-            std::cout << "\n--- СОХРАНЕНИЕ ОПТИМАЛЬНОЙ ТРАЕКТОРИИ ДЛЯ " << method.name << " ---" << std::endl;
-            
-            std::string file_prefix = method.name + "_OPTIMAL_mu" + std::to_string(global_mu).substr(0, 5) +
-                                      "_eta" + std::to_string(global_eta).substr(0, 4) +
-                                      "_Km" + std::to_string(global_Km).substr(0, 4) +
-                                      "_Kp" + std::to_string(global_Kp).substr(0, 5);
-            
-            saveAllResults(global_best_result.trajectory, file_prefix);
-            saveAllPlots(global_best_result.trajectory, file_prefix,
-                         method.name + " (дальность " +
-                         std::to_string(global_max_range).substr(0, 5) + " км)",
-                         inits.y_g_pusk);
-            
-            std::cout << "  ✅ Оптимальная траектория сохранена!" << std::endl;
+            std::cout << "    mass_r = " << last.mass_r << " кг" << std::endl;
+            std::cout << "    P_r = " << last.P_r << " Н" << std::endl;
         }
     }
+
+    // Запись в файл лучших параметров
+    best_params_file << "\nМАКСИМУМ ДАЛЬНОСТИ" << std::endl;
+    best_params_file << "==============================" << std::endl;
+    best_params_file << "Дальность:          " << std::fixed << std::setprecision(2) 
+                     << global_max_range << " км" << std::endl;
+    best_params_file << "Время полёта:       " << global_best_result.flight_time << " с" << std::endl;
+    best_params_file << "\nОптимальные параметры:" << std::endl;
+    best_params_file << "  μ  = " << std::setprecision(4) << global_mu << std::endl;
+    best_params_file << "  η  = " << std::setprecision(2) << global_eta << std::endl;
+    best_params_file << "  K_m = " << std::setprecision(3) << global_Km << std::endl;
+    best_params_file << "  K_P = " << std::setprecision(4) << global_Kp << std::endl;
+    best_params_file << "  K_g = " << std::setprecision(3) << global_Kg << std::endl;
+
+    if (global_best_result.is_success && !global_best_result.trajectory.empty())
+    {
+        const auto& last = global_best_result.trajectory.back();
+        best_params_file << "\nПараметры встречи:" << std::endl;
+        best_params_file << "  x_g = " << std::setprecision(2) << last.x_g_r << " м" << std::endl;
+        best_params_file << "  y_g = " << last.y_g_r << " м" << std::endl;
+        best_params_file << "  v_r = " << last.v_r << " м/с" << std::endl;
+        best_params_file << "  Θ_r = " << last.Theta_r * 180.0 / PI << "°" << std::endl;
+        best_params_file << "  r_rc = " << last.r_rc << " м" << std::endl;
+    }
+    best_params_file.close();
+
+    // Сохраняем оптимальную траекторию
+    if (global_best_result.is_success && !global_best_result.trajectory.empty())
+    {
+        std::cout << "\n--- СОХРАНЕНИЕ ОПТИМАЛЬНОЙ ТРАЕКТОРИИ ---" << std::endl;
+        
+        std::string file_prefix = prefix + "_OPTIMAL_mu" + std::to_string(global_mu).substr(0, 5) +
+                                  "_eta" + std::to_string(global_eta).substr(0, 4) +
+                                  "_Km" + std::to_string(global_Km).substr(0, 4) +
+                                  "_Kp" + std::to_string(global_Kp).substr(0, 5) +
+                                  "_Kg" + std::to_string(global_Kg).substr(0, 4);
+        
+        saveAllResults(global_best_result.trajectory, file_prefix);
+        saveAllPlots(global_best_result.trajectory, file_prefix,
+                     scenario_name + " (дальность " +
+                     std::to_string(global_max_range).substr(0, 5) + " км)",
+                     y_opt);
+        
+        std::cout << "  ✅ Оптимальная траектория сохранена!" << std::endl;
+    }
+    else
+    {
+        std::cout << "\n  ❌ Не удалось рассчитать оптимальную траекторию" << std::endl;
+    }
+
+    // Информация о сохранённых файлах
+    std::cout << "\n--- СОХРАНЁННЫЕ ФАЙЛЫ ДЛЯ СЦЕНАРИЯ " << scenario_name << " ---" << std::endl;
+    std::cout << "  📊 Данные для графиков:" << std::endl;
+    std::cout << "    - " << prefix << "_range_heatmap.dat" << std::endl;
+    std::cout << "    - " << prefix << "_range_curves.dat" << std::endl;
+    std::cout << "    - " << prefix << "_range_full_data.dat" << std::endl;
+    std::cout << "  📄 Отчёт:" << std::endl;
+    std::cout << "    - " << prefix << "_best_parameters.txt" << std::endl;
 }
 
 // ============================================================================
@@ -731,12 +762,12 @@ int main(int argc, char* argv[])
     // 2. Данные по цели, носителю и ракете
     // ========================================================================
     C_Data CData;
-    CData.n_xa_c_potr = {{0.0, 0.0}, {600.0, 0.0}};
-    CData.n_ya_c_potr = {{0.0, 0.0}, {600.0, 0.0}};
+    CData.n_xa_c_potr = {{0.0, 0.0}, {10.0, 0.0}};
+    CData.n_ya_c_potr = {{0.0, 1.0}, {10.0, 1.0}};
 
     N_Data NData;
-    NData.n_xa_n_potr = {{0.0, 0.0}, {600.0, 0.0}};
-    NData.n_ya_n_potr = {{0.0, 1.0}, {600.0, 1.0}};
+    NData.n_xa_n_potr = {{0.0, 0.0}, {10.0, 0.0}};
+    NData.n_ya_n_potr = {{0.0, 1.0}, {10.0, 1.0}};
 
     R_Data RData;
     RData.n_xa_r_potr = {{0.0, 0.0}, {600.0, 0.0}};
@@ -768,43 +799,135 @@ int main(int argc, char* argv[])
     limits.v_r_min = 50.0;
 
     // ========================================================================
-    // 5. НАЧАЛЬНЫЕ УСЛОВИЯ (ЦЕЛЬ НА ВСТРЕЧНОМ КУРСЕ)
+    // 5. СЦЕНАРИЙ 1: EVT на благоприятных условиях (высота 10 км, скорость 270 м/с)
     // ========================================================================
-    InitConditions inits;
-    inits.Theta_c0 = 180.0 * PI / 180.0;  // ВСТРЕЧНЫЙ КУРС
-    inits.v_c0 = 18.0 * 0.514444;         // 18 узлов в м/с
-    inits.x_g_c0 = 200000.0;              // 200 км от точки пуска
-    inits.y_g_c0 = 0.0;
-    inits.Theta_n0 = 0.0;
-    inits.v_n0 = 120.0;
-    inits.x_g_pusk = 0.0;
-    inits.y_g_pusk = 200.0;
-    inits.Theta_r0 = std::nan("");
-    inits.v_r0 = 150.0;
+    {
+        std::cout << "\n========================================" << std::endl;
+        std::cout << "  СЦЕНАРИЙ 1: EVT - БЛАГОПРИЯТНЫЕ УСЛОВИЯ" << std::endl;
+        std::cout << "  Высота: 10 км, Скорость: 270 м/с" << std::endl;
+        std::cout << "========================================" << std::endl;
+
+        InitConditions inits;
+        inits.Theta_c0 =  PI ;
+        inits.v_c0 = 18.0 * 0.514444;
+        inits.x_g_c0 = 200000.0;
+        inits.y_g_c0 = 0.0;
+        inits.Theta_n0 = 0.0;
+        inits.v_n0 = 270.0;              // БЛАГОПРИЯТНЫЕ УСЛОВИЯ
+        inits.x_g_pusk = 0.0;
+        inits.y_g_pusk = 10000.0;        // ВЫСОТА 10 км
+        inits.Theta_r0 = std::nan("");
+        inits.v_r0 = 200.0;
+
+        scanAndOptimize(
+            calcParams, inits, limits,
+            CData, NData, RData,
+            rocket,
+            "SCENARIO1_EVT_HIGH",
+            GuidanceMethod::EVT,
+            3.0,
+            0.0,
+            0.0,
+            10000.0
+        );
+    }
 
     // ========================================================================
-    // 6. СКАНИРОВАНИЕ И ОПТИМИЗАЦИЯ
+    // 6. СЦЕНАРИЙ 2: EVT на неблагоприятных условиях (высота 200 м, скорость 120 м/с)
     // ========================================================================
-    scanAndOptimizeAllMethods(
-        calcParams, inits, limits,
-        CData, NData, RData,
-        rocket,
-        2.0,  // K_g фиксирован
-        0.0,  // m_norm
-        0.0   // switch_time
-    );
+    {
+        std::cout << "\n========================================" << std::endl;
+        std::cout << "  СЦЕНАРИЙ 2: EVT - НЕБЛАГОПРИЯТНЫЕ УСЛОВИЯ" << std::endl;
+        std::cout << "  Высота: 200 м, Скорость: 120 м/с" << std::endl;
+        std::cout << "========================================" << std::endl;
+
+        InitConditions inits;
+        inits.Theta_c0 = PI ;
+        inits.v_c0 = 18.0 * 0.514444;
+        inits.x_g_c0 = 200000.0;
+        inits.y_g_c0 = 0.0;
+        inits.Theta_n0 = 0.0;
+        inits.v_n0 = 120.0;              // НЕБЛАГОПРИЯТНЫЕ УСЛОВИЯ
+        inits.x_g_pusk = 0.0;
+        inits.y_g_pusk = 200.0;          // ВЫСОТА 200 м
+        inits.Theta_r0 = std::nan("");
+        inits.v_r0 = 150.0;
+
+        scanAndOptimize(
+            calcParams, inits, limits,
+            CData, NData, RData,
+            rocket,
+            "SCENARIO2_EVT_LOW",
+            GuidanceMethod::EVT,
+            3.0,
+            0.0,
+            0.0,
+            200.0
+        );
+    }
 
     // ========================================================================
-    // 7. ЗАВЕРШЕНИЕ
+    // 7. СЦЕНАРИЙ 3: GORKA на неблагоприятных условиях (высота 200 м, скорость 120 м/с)
+    // ========================================================================
+    {
+        std::cout << "\n========================================" << std::endl;
+        std::cout << "  СЦЕНАРИЙ 3: GORKA - НЕБЛАГОПРИЯТНЫЕ УСЛОВИЯ" << std::endl;
+        std::cout << "  Высота: 200 м, Скорость: 120 м/с" << std::endl;
+        std::cout << "========================================" << std::endl;
+
+        InitConditions inits;
+        inits.Theta_c0 = PI ;
+        inits.v_c0 = 18.0 * 0.514444;
+        inits.x_g_c0 = 200000.0;
+        inits.y_g_c0 = 0.0;
+        inits.Theta_n0 = 0.0;
+        inits.v_n0 = 120.0;              // НЕБЛАГОПРИЯТНЫЕ УСЛОВИЯ
+        inits.x_g_pusk = 0.0;
+        inits.y_g_pusk = 200.0;          // ВЫСОТА 200 м
+        inits.Theta_r0 = std::nan("");
+        inits.v_r0 = 150.0;
+
+        scanAndOptimize(
+            calcParams, inits, limits,
+            CData, NData, RData,
+            rocket,
+            "SCENARIO3_GORKA_LOW",
+            GuidanceMethod::Gorka,
+            3.0,
+            0.0,
+            0.0,
+            200.0
+        );
+    }
+
+    // ========================================================================
+    // 8. ЗАВЕРШЕНИЕ
     // ========================================================================
     std::cout << "\n========================================" << std::endl;
     std::cout << "  РАСЧЁТ ЗАВЕРШЁН" << std::endl;
     std::cout << "========================================" << std::endl;
 
+    std::cout << "\nСценарии:" << std::endl;
+    std::cout << "  1. EVT на благоприятных условиях (высота 10 км, скорость 270 м/с)" << std::endl;
+    std::cout << "     - Файлы: SCENARIO1_EVT_HIGH_*" << std::endl;
+    std::cout << "  2. EVT на неблагоприятных условиях (высота 200 м, скорость 120 м/с)" << std::endl;
+    std::cout << "     - Файлы: SCENARIO2_EVT_LOW_*" << std::endl;
+    std::cout << "  3. GORKA на неблагоприятных условиях (высота 200 м, скорость 120 м/с)" << std::endl;
+    std::cout << "     - Файлы: SCENARIO3_GORKA_LOW_*" << std::endl;
+
+    std::cout << "\nПараметры сканирования:" << std::endl;
+    std::cout << "  mu: 20 точек [" << 0.1 << ", " << 0.6 << "]" << std::endl;
+    std::cout << "  eta: 20 точек [" << 10.0 << ", " << 80.0 << "]" << std::endl;
+    std::cout << "  K_m: 10 точек [" << 0.0 << ", " << 5.0 << "]" << std::endl;
+    std::cout << "  K_P: 10 точек [" << 0.05 << ", " << 1.0 << "]" << std::endl;
+    std::cout << "  K_g: 10 точек [" << 1.0 << ", " << 2.0 << "]" << std::endl;
+    std::cout << "  Всего расчётов на сценарий: 20*20*10*10*10 = 400000" << std::endl;
+    std::cout << "  Всего расчётов: 400000 * 3 = 1200000" << std::endl;
+
     std::cout << "\nДля построения графиков выполните:" << std::endl;
     std::cout << "  python plot_results.py" << std::endl;
     std::cout << "\nИли используйте Gnuplot:" << std::endl;
-    std::cout << "  gnuplot -persist plots/OPTIMAL_*_plot.gnu" << std::endl;
+    std::cout << "  gnuplot -persist plots/*_plot.gnu" << std::endl;
 
     return 0;
 }

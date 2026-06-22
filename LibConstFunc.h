@@ -83,33 +83,94 @@ inline double linterp(double M, const double* Ms, const double* vals, int n)
 }
 
 // ============================================================================
-// Аэродинамические таблицы
+// Аэродинамические таблицы для схемы бесхвостка
+// ============================================================================
+// inline double C_x0_pass(double M)
+// {
+//     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
+//     static const double vals[] = { 0.336, 0.348, 0.618, 0.571, 0.313, 0.170 };
+//     return linterp(M, Ms, vals, 6);
+// }
+
+// inline double C_y_alpha(double M)
+// {
+//     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
+//     static const double vals[] = { 5.578, 10.768, 10.260, 9.487, 7.200, 5.741 };
+//     return linterp(M, Ms, vals, 6);
+// }
+
+// inline double C_y_delta(double M)
+// {
+//     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
+//     static const double vals[] = { 5.548, 6.274, 7.233, 6.451, 3.432, 1.613 };
+//     return linterp(M, Ms, vals, 6);
+// }
+
+// inline double delta_bal_over_alpha(double M)
+// {
+//     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
+//     static const double vals[] = { -0.098, -0.294, -0.210, -0.197, -0.204, -0.285 };
+//     return linterp(M, Ms, vals, 6);
+// }
+
+// ============================================================================
+// Аэродинамические таблицы для схемы утка
+// ============================================================================
+// inline double C_x0_pass(double M)
+// {
+//     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
+//     static const double vals[] = { 0.432, 0.442, 0.801, 0.677, 0.398, 0.221 };
+//     return linterp(M, Ms, vals, 6);
+// }
+
+// inline double C_y_alpha(double M)
+// {
+//     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
+//     static const double vals[] = { 18.767, 18.717, 20.509, 18.998, 12.513, 8.534 };
+//     return linterp(M, Ms, vals, 6);
+// }
+
+// inline double C_y_delta(double M)
+// {
+//     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
+//     static const double vals[] = { 1.921, 2.05, 1.51, 1.531, 2.12, 1.976 };
+//     return linterp(M, Ms, vals, 6);
+// }
+
+// inline double delta_bal_over_alpha(double M)
+// {
+//     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
+//     static const double vals[] = { 0.46, 0.41, 0.39, 0.61, 0.635, 1.177 };
+//     return linterp(M, Ms, vals, 6);
+// }
+// ============================================================================
+// Аэродинамические таблицы для нормальной схемы
 // ============================================================================
 inline double C_x0_pass(double M)
 {
     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
-    static const double vals[] = { 0.336, 0.348, 0.618, 0.571, 0.313, 0.170 };
+    static const double vals[] = { 0.511, 0.514, 0.832, 0.682, 0.4, 0.21 };
     return linterp(M, Ms, vals, 6);
 }
 
 inline double C_y_alpha(double M)
 {
     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
-    static const double vals[] = { 5.578, 10.768, 10.260, 9.487, 7.200, 5.741 };
+    static const double vals[] = { 18.427, 18.023, 21.8, 20.754, 16.864, 9.88 };
     return linterp(M, Ms, vals, 6);
 }
 
 inline double C_y_delta(double M)
 {
     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
-    static const double vals[] = { 5.548, 6.274, 7.233, 6.451, 3.432, 1.613 };
+    static const double vals[] = { 6.717, 7.44, 7.962, 6.722, 2.672, 0.947 };
     return linterp(M, Ms, vals, 6);
 }
 
 inline double delta_bal_over_alpha(double M)
 {
     static const double Ms[]   = {0.4, 0.8, 1.1, 1.5, 3.0, 6.0};
-    static const double vals[] = { -0.098, -0.294, -0.210, -0.197, -0.204, -0.285 };
+    static const double vals[] = { -0.404, -0.301, -0.348, -0.387, -0.78, -1.093 };
     return linterp(M, Ms, vals, 6);
 }
 
