@@ -1,6 +1,9 @@
 ﻿#pragma once
 #include <vector>
 
+#ifndef DATASTRUCTS_H
+#define DATASTRUCTS_H 
+
 //Определения структур для передачи исходных данных в функцию
 
 struct CalcParameters //Параметры расчёта
@@ -164,3 +167,5 @@ struct DecartZone_Data
 	double y_max;     //верхняя граница, м
 	double Delta_y;    //шаг, м
 };
+
+#endif // DATASTRUCTS_H 
