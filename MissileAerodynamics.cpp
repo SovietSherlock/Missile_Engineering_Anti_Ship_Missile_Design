@@ -44,7 +44,7 @@ AeroCoefficients GetAerodynamics(double M) {
     aero.cx0_pas         = Linterp(table_cx0, M, 1, 0);
     aero.cy_alpha        = Linterp(table_cya, M, 1, 0);
     aero.cy_delta        = Linterp(table_cyd, M, 1, 0);
-    aero.alpha_delta_bal = Linterp(table_bal, M, 1, 0);
+    aero.delta_alpha_bal = Linterp(table_bal, M, 1, 0);
 
     return aero;
 }
