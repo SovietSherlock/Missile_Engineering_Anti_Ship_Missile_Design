@@ -481,7 +481,7 @@ int main()
     InitConditions init_low;
     init_low.Theta_c0 =  M_PI ;
     init_low.v_c0 = 18.0 * 0.514444;
-    init_low.x_g_c0 = 150000.0;
+    init_low.x_g_c0 = 432000.0;
     init_low.y_g_c0 = 0.0;
     init_low.Theta_n0 = 0.0;
     init_low.v_n0 = 120.0;              // НЕБЛАГОПРИЯТНЫЕ УСЛОВИЯ
@@ -498,10 +498,22 @@ int main()
     init_high.Theta_n0 = 0.0;
     init_high.v_r0 = 270.0;
     init_high.Theta_r0 = std::nan("");
-    init_high.x_g_c0 = 1210000; // ЗДЕСБ ИЗМЕНИШЬ ДАЛЬНОСТЬ НА НАЙДЕННУЮ
+    init_high.x_g_c0 = 1210000.0; // ЗДЕСБ ИЗМЕНИШЬ ДАЛЬНОСТЬ НА НАЙДЕННУЮ
     init_high.y_g_c0 = 0.0;
     init_high.v_c0 = 18.0 * 0.514444;
     init_high.Theta_c0 = M_PI;
+
+    InitConditions init_Gorka;
+    init_Gorka.Theta_c0 =  M_PI ;
+    init_Gorka.v_c0 = 18.0 * 0.514444;
+    init_Gorka.x_g_c0 = 55000.0;
+    init_Gorka.y_g_c0 = 0.0;
+    init_Gorka.Theta_n0 = 0.0;
+    init_Gorka.v_n0 = 120.0;
+    init_Gorka.x_g_pusk = 0.0;
+    init_Gorka.y_g_pusk = 200.0;
+    init_Gorka.Theta_r0 = std::nan("");
+    init_Gorka.v_r0 = init_Gorka.v_n0;
 
 
     // OptimizeResult result = optimize_max_range_parallel(
@@ -513,53 +525,26 @@ int main()
     //     10.0
     //     );
 
-    double mu = 0.48, beta = 1.15763, eta = 6, Km = 5, Kp = 0.25, Kg = 1.9; // изменить при получении оптимизированных данных
+    double mu = 0.48, beta = 0, eta = 6, Km = 5, Kp = 0.25, Kg = 1.9; // изменить при получении оптимизированных данных
     GuidanceMethod_Data method;
     method.Method = GuidanceMethod::EVT;
     method.k = 9;
 
-    std::cout << "=== init_low ===" << std::endl;
-    std::cout << "x_g_pusk=" << init_low.x_g_pusk << " y_g_pusk=" << init_low.y_g_pusk << std::endl;
-    std::cout << "v_n0=" << init_low.v_n0 << " Theta_n0=" << init_low.Theta_n0 << std::endl;
-    std::cout << "v_r0=" << init_low.v_r0 << " Theta_r0=" << init_low.Theta_r0 << std::endl;
-    std::cout << "x_g_c0=" << init_low.x_g_c0 << " y_g_c0=" << init_low.y_g_c0 << std::endl;
-    std::cout << "v_c0=" << init_low.v_c0 << " Theta_c0=" << init_low.Theta_c0 << std::endl;
-    std::cout << "=== limits ===" << std::endl;
-    std::cout << "t_r_max=" << limits.t_r_max << " n_ya_r_max=" << limits.n_ya_r_max << std::endl;
-    std::cout << "=== calc ===" << std::endl;
-    std::cout << "dt=" << calc.dt << " r_por=" << calc.r_por << std::endl;
-    std::cout << "=== rocket ===" << std::endl;
-    std::cout << "m_bch=" << rocket.m_bch << " m_oun=" << rocket.m_oun << " m_np=" << rocket.m_np << std::endl;
-    std::cout << "d=" << rocket.d << " beta=" << rocket.beta << std::endl;
-    std::cout << "m_pn=" << rocket.m_pn() << std::endl;
-    std::cout << "=== method ===" << std::endl;
-    std::cout << "k=" << method.k << std::endl;
-
-    // Вычислите m_0 так же, как в оптимизаторе
-    double m_pn = rocket.m_pn();
-    double m_0_check = m_pn / (1.0 - beta * mu);
-    double m_t = mu * m_0_check;
-    for (int iter = 0; iter < 5; ++iter)
-    {
-        beta = calculate_beta(rocket.d, m_t);
-        if (beta * mu >= 1.0) break;
-        m_0_check = m_pn / (1.0 - beta * mu);
-        m_t = mu * m_0_check;
-    }
-    std::cout << std::setprecision(17) << "Final beta = " << beta << std::endl;
-    std::cout << std::setprecision(17) << "Final mu = " << mu << std::endl;
-    std::cout << std::setprecision(17) << "Final mu*beta = " << mu * beta << std::endl;
-    std::cout << std::setprecision(17) << "m_0_check = " << m_0_check << std::endl;
-    std::cout << std::setprecision(17) << "m_0 from log = 639.15" << std::endl;
-    rocket.beta = beta;
-    rocket.beta = beta;
-
+    method.Method = GuidanceMethod::EVT;
     run_and_save("V12_Best_low", calc, limits,
                  Cdata, Ndata, Rdata, init_low,
                  method, rocket, mu, eta, Km, Kp, Kg);
 
+    method.Method = GuidanceMethod::EVT;
+
     run_and_save("V12_Best_high", calc, limits,
                  Cdata, Ndata, Rdata, init_high,
+                 method, rocket, mu, eta, Km, Kp, Kg);
+
+    method.Method = GuidanceMethod::Gorka;
+
+    run_and_save("V12_Best_gorka", calc, limits,
+                 Cdata, Ndata, Rdata, init_Gorka,
                  method, rocket, mu, eta, Km, Kp, Kg);
 
     return 0;

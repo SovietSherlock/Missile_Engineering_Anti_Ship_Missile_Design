@@ -12,3 +12,11 @@ t_low = 418.8 с
 t_high = 595.43 с
 Длина ракеты = 4 м
 ========================================
+
+BOTH_OK: m0=639.15 mu=0.48 beta=1.15763 eta=6 Km=5 Kp=0.25 Kg=1.9 k=9 R_max=1200 t_low=418.8 t_high=589.95
+
+BOTH_OK: m0=639.15 mu=0.48 beta=1.15763 eta=6 Km=5 Kp=0.25 Kg=1.9 k=8 R_max=1200 t_low=590.55 t_high=598.48
+
+BOTH_OK: m0=624.103 mu=0.47 beta=1.15946 eta=6 Km=5 Kp=0.25 Kg=1.9 k=9 R_max=1200 t_low=569.16 t_high=599.81
+
+BOTH_OK: m0=639.15 mu=0.48 beta=1.15763 eta=6 Km=5 Kp=0.25 Kg=1.8 k=9 R_max=1200 t_low=300.38 t_high=599.21
