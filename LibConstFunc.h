@@ -404,19 +404,3 @@ inline double calculate_beta(double d, double m_t)
 
     return K_d / m_t + beta_inf;
 }
-
-/// Расчёт границы радиогоризонта (безопасной высоты) 
-inline double calc_radar_horizon_boundary(
-    double r_rc,         // расстояние между ракетой и целью, м
-    double H_ant = 30.0, // высота антенны РЛС цели, м
-    double H_bez = 0.5   // высота безопасности, м
-)
-{
-    const double R_earth = 6371000.0;
-    const double coef = 2.0 * sqrt(2.0 * R_earth); // ≈ 7139.2
-    
-    // Безопасная высота (граница радиогоризонта)
-    double y_bez = pow(r_rc / coef - sqrt(H_ant), 2.0) - H_bez;
-    
-    return y_bez;
-}

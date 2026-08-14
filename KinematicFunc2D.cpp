@@ -101,3 +101,61 @@ double ddot_epsilon(double x_g_r, double y_g_r, double x_g_c, double y_g_c, doub
 	return (Delta_x * Delta_ddot_y - Delta_y * Delta_ddot_x) / sqr(r_rc)
 		- 2.0 * (Delta_y * Delta_dot_y + Delta_x * Delta_dot_x) * (Delta_x * Delta_dot_y - Delta_y * Delta_dot_x) / pow(r_rc, 4.0);
 }
+
+/// Расчёт угловой скорости линии визирования для виртуальной цели
+double dot_epsilon_virtual(
+    double x_g_r, double y_g_r,
+    double x_g_c, double y_g_c,
+    double delta_x_virtual,
+    double v_r, double v_c,
+    double Theta_r, double Theta_c)
+{
+    // Координаты виртуальной цели (смещена ближе к ракете по оси X относительно реальной)
+    double x_g_virtual = x_g_c - delta_x_virtual;
+    double y_g_virtual = y_g_c;  // цель на уровне моря
+    
+    double Delta_x = x_g_virtual - x_g_r;
+    double Delta_y = y_g_virtual - y_g_r;
+    
+    double Delta_dot_x = v_c * cos(Theta_c) - v_r * cos(Theta_r);
+    double Delta_dot_y = v_c * sin(Theta_c) - v_r * sin(Theta_r);
+    
+    double r_sq = Delta_x * Delta_x + Delta_y * Delta_y;
+    
+    if (r_sq < 1e-12) return 0.0;
+    
+    return (Delta_x * Delta_dot_y - Delta_y * Delta_dot_x) / r_sq;
+}
+
+/// Расчёт критического расстояния для пикирования
+/// Формула (13) из PDF
+double calc_r_critical(
+    double v_r, double v_c,
+    double H_gorka,
+    double k_dive,
+    double n_ya_max)
+{
+    double numerator = k_dive * (v_r * v_r - v_r * v_c) * H_gorka;
+    double denominator = g * (n_ya_max - 1.0);
+    
+    if (denominator <= 0.0 || numerator <= 0.0)
+        return 0.0;
+    
+    return sqrt(numerator / denominator);
+}
+
+/// Расчёт безопасной высоты (границы радиогоризонта)
+/// Формула (6) из PDF
+double calc_radar_horizon_boundary(
+    double r_rc,
+    double H_ant,
+    double H_bez)
+{
+    const double R_earth = 6371000.0;
+    const double coef = 2.0 * sqrt(2.0 * R_earth / 3.0); // ≈ 2 * 2060.7 = 4121.4
+	
+    // Безопасная высота (граница радиогоризонта)
+    double y_bez = pow(r_rc / coef - sqrt(H_ant), 2.0) - H_bez;
+    
+    return y_bez;
+}

@@ -29,62 +29,176 @@ double n_ya_potr_EVT(double v_r, double dot_epsilon_rc, double Theta_r, double K
     return result;
 }
 
-double n_ya_potr_Gorka(double v_r, double Theta_r, double y_r, double r_rc,
-                       double epsilon_rc, double h_prog_maneuver, double &dTheta_r_out)
+/// Энергетически выгодная траектория с наведением на виртуальную цель
+double n_ya_potr_EVT_virtual(
+    double v_r, double v_c,
+    double Theta_r, double Theta_c,
+    double dot_epsilon_virtual,
+    double K_g, double k)
 {
-    const double k_prog = 0.8;           // ↑ быстрее реакция, но без alpha_max
-    const double h_cruise = 200.0;     // ↑ оптимум: ниже 300, выше 100
-    const double h_peak = 300.0;       // подъём всего на +20 м
-    const double theta_climb = 1.0;    // минимальный подъём для "горки"
-    const double theta_dive_max = -35.0 * M_PI / 180.0; // не ограничиваем сильно
+    // Классическая ЭВТ, но с угловой скоростью на виртуальную цель
+    return (v_r / g) * k * dot_epsilon_virtual + K_g * cos(Theta_r);
+}
 
-    dTheta_r_out = 0.0;
-    double Theta_prog = 0.0;
+/// Маршевый полёт (закон управления высотой)
+double n_ya_potr_March(
+    double v_r, double Theta_r,
+    double y_g_r,
+    double H_march,
+    double K_H_march,
+    double K_v_march)
+{
+    // n_ya = K_H*(H_марш - y) - K_v*v*sin(Theta) + cos(Theta)
+    return K_H_march * (H_march - y_g_r)
+         - K_v_march * v_r * sin(Theta_r)
+         + cos(Theta_r);
+}
 
-    // === Фаза 1: Крейсерский полёт ===
-    if (r_rc > h_prog_maneuver) {
-        double h_err = h_cruise - y_r;
-        Theta_prog = 0.002 * h_err;
+/// Подъём на высоту "горки"
+double n_ya_potr_GorkaClimb(
+    double v_r, double Theta_r,
+    double y_g_r,
+    double H_gorka,
+    double K_H_gorka,
+    double K_v_gorka)
+{
+    // n_ya = K_H_горки*(H_горки - y) - K_v_горки*v*sin(Theta) + cos(Theta)
+    return K_H_gorka * (H_gorka - y_g_r)
+         - K_v_gorka * v_r * sin(Theta_r)
+         + cos(Theta_r);
+}
 
-        double theta_lim = 1.0 * M_PI / 180.0;
-        if (Theta_prog >  theta_lim) Theta_prog =  theta_lim;
-        if (Theta_prog < -theta_lim) Theta_prog = -theta_lim;
-
-        dTheta_r_out = k_prog * (Theta_prog - Theta_r);
-        double n_ya = (v_r * dTheta_r_out / g) + cos(Theta_r);
-        if (n_ya > 1.1) n_ya = 1.1;
-        if (n_ya < 0.9)  n_ya = 0.9;
+/// Главная функция управления двухфазной траекторией
+double n_ya_potr_TwoPhase(
+    double v_r, double Theta_r,
+    double y_g_r,
+    double r_rc,
+    double epsilon_rc,
+    double v_c, double Theta_c,
+    double dot_epsilon_virtual,
+    double dot_epsilon_rc,
+    const GuidanceMethod_Data& mtd,
+    int& phase,
+    double r_crit_calc,
+    double n_ya_max)
+{
+    // ========================================================================
+    // ФАЗА 0: ЭНЕРГЕТИЧЕСКИ ВЫГОДНАЯ ТРАЕКТОРИЯ (на виртуальную цель)
+    // ========================================================================
+    if (phase == 0)
+    {
+        // Перегрузка по ЭВТ на виртуальную цель
+        double n_ya_evt = n_ya_potr_EVT_virtual(
+            v_r, v_c,
+            Theta_r, Theta_c,
+            dot_epsilon_virtual,
+            mtd.K_g,
+            mtd.k
+        );
+        
+        // Перегрузка для маршевого режима (для сравнения)
+        double n_ya_march = n_ya_potr_March(
+            v_r, Theta_r,
+            y_g_r,
+            mtd.H_march,
+            mtd.K_H_march,
+            mtd.K_v_march
+        );
+        
+        // УСЛОВИЕ ПЕРЕХОДА: 
+        // 1) Угол траектории >= 0 (ракета пикирует)
+        // 2) Маршевая перегрузка МЕНЬШЕ, чем ЭВТ (марш экономичнее)
+        if (Theta_r >= 0.0 && n_ya_march < n_ya_evt)
+        {
+            phase = 1;  // переходим на маршевый участок
+            return n_ya_march;
+        }
+        
+        return n_ya_evt;
+    }
+    
+    // ========================================================================
+    // ФАЗА 1: МАРШЕВЫЙ ПОЛЁТ
+    // ========================================================================
+    if (phase == 1)
+    {
+        double n_ya = n_ya_potr_March(
+            v_r, Theta_r,
+            y_g_r,
+            mtd.H_march,
+            mtd.K_H_march,
+            mtd.K_v_march
+        );
+        
+        // УСЛОВИЕ ПЕРЕХОДА: достигли безопасного расстояния для горки
+        if (r_rc <= mtd.r_save)
+        {
+            phase = 2;  // переходим к подъёму
+        }
+        
         return n_ya;
     }
-
-    // === Фаза 2: Параболический подъём (минимальный) ===
-    if (r_rc > h_prog_maneuver * 0.25) {
-        double t = (r_rc - h_prog_maneuver * 0.25) / (h_prog_maneuver * 0.75);
-        double profile = std::sin(M_PI * t);  // плавная парабола
-        Theta_prog = theta_climb * profile * M_PI / 180.0;
-
-        // Жёсткий потолок
-        if (y_r >= h_peak && Theta_prog > 0) Theta_prog = 0.0;
-
-        dTheta_r_out = k_prog * (Theta_prog - Theta_r);
-        double n_ya = (v_r * dTheta_r_out / g) + cos(Theta_r);
-        if (n_ya > 1.3) n_ya = 1.3;
-        if (n_ya < 0.8) n_ya = 0.8;
+    
+    // ========================================================================
+    // ФАЗА 2: ПОДЪЁМ НА ВЫСОТУ "ГОРКИ"
+    // ========================================================================
+    if (phase == 2)
+    {
+        double n_ya = n_ya_potr_GorkaClimb(
+            v_r, Theta_r,
+            y_g_r,
+            mtd.H_gorka,
+            mtd.K_H_gorka,
+            mtd.K_v_gorka
+        );
+        
+        // УСЛОВИЕ ПЕРЕХОДА: достигли высоты горки (с допуском 0.5 м)
+        if (y_g_r >= mtd.H_gorka - 0.5)
+        {
+            phase = 3;  // переходим к горизонтальному полёту
+        }
+        
         return n_ya;
     }
-
-    // === Фаза 3: Точное пикирование на цель ===
-    Theta_prog = epsilon_rc;  // точно по линии визирования, без offset
-
-    // Аварийное ограничение: не круче -35°
-    if (Theta_prog < theta_dive_max) Theta_prog = theta_dive_max;
-
-    // Если очень низко и не у цели — точно на цель
-    if (y_r < 15.0 && r_rc > 100.0) Theta_prog = epsilon_rc;
-
-    dTheta_r_out = k_prog * (Theta_prog - Theta_r);
-    double n_ya = (v_r * dTheta_r_out / g) + cos(Theta_r);
-    if (n_ya > 3.0) n_ya = 3.0;
-    if (n_ya < -1.5) n_ya = -1.5;
-    return n_ya;
+    
+    // ========================================================================
+    // ФАЗА 3: ГОРИЗОНТАЛЬНЫЙ ПОЛЁТ НА ВЫСОТЕ "ГОРКИ"
+    // ========================================================================
+    if (phase == 3)
+    {
+        double n_ya = n_ya_potr_GorkaClimb(
+            v_r, Theta_r,
+            y_g_r,
+            mtd.H_gorka,
+            mtd.K_H_gorka,
+            mtd.K_v_gorka
+        );
+        
+        // УСЛОВИЕ ПЕРЕХОДА: достигли критического расстояния для пикирования
+        // r_crit_calc рассчитан в кинематике по формуле (13) из PDF
+        if (r_rc <= r_crit_calc && r_crit_calc > 0.0)
+        {
+            phase = 4;  // переходим к пикированию
+        }
+        
+        return n_ya;
+    }
+    
+    // ========================================================================
+    // ФАЗА 4: ПИКИРОВАНИЕ (пропорциональная навигация)
+    // ========================================================================
+    if (phase == 4)
+    {
+        // Используем классическую пропорциональную навигацию
+        // с коэффициентом k_dive из настроек
+        return n_ya_potr_Proportional(
+            mtd.k_dive,
+            dot_epsilon_rc,
+            v_r,
+            Theta_r
+        );
+    }
+    
+    // Защита от выхода за пределы (если phase не 0-4)
+    return 0.0;
 }
