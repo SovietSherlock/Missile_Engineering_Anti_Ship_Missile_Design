@@ -128,7 +128,6 @@ double dot_epsilon_virtual(
 }
 
 /// Расчёт критического расстояния для пикирования
-/// Формула (13) из PDF
 double calc_r_critical(
     double v_r, double v_c,
     double H_gorka,
@@ -141,21 +140,21 @@ double calc_r_critical(
     if (denominator <= 0.0 || numerator <= 0.0)
         return 0.0;
     
-    return sqrt(numerator / denominator);
+    return (sqrt(numerator / denominator) + 1.0);
 }
 
 /// Расчёт безопасной высоты (границы радиогоризонта)
-/// Формула (6) из PDF
 double calc_radar_horizon_boundary(
     double r_rc,
     double H_ant,
-    double H_bez)
+    double H_save,
+	double H_march)
 {
     const double R_earth = 6371000.0;
     const double coef = 2.0 * sqrt(2.0 * R_earth / 3.0); // ≈ 2 * 2060.7 = 4121.4
 	
     // Безопасная высота (граница радиогоризонта)
-    double y_bez = pow(r_rc / coef - sqrt(H_ant), 2.0) - H_bez;
+    double y_bez = pow(r_rc / coef - sqrt(H_ant), 2.0) - H_save;
     
     return y_bez;
 }

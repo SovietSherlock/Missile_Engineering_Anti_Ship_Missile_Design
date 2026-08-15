@@ -129,10 +129,12 @@ double calc_r_critical(
 /// </summary>
 /// <param name="r_rc"> - расстояние между ракетой и целью, м</param>
 /// <param name="H_ant"> - высота антенны РЛС цели, м (по умолчанию 30)</param>
-/// <param name="H_bez"> - высота безопасности, м (по умолчанию 0.5)</param>
+/// <param name="H_save"> - высота безопасности, м (по умолчанию 0.5)</param>
+/// <param name="H_march"> - маршевая высота, м (по умолчанию 5.5)</param>
 /// <returns>Безопасная высота (граница радиогоризонта), м</returns>
 double calc_radar_horizon_boundary(
     double r_rc,
     double H_ant = 30.0,
-    double H_bez = 0.5
+    double H_save = 0.5,
+    double H_march = 5.5
 );

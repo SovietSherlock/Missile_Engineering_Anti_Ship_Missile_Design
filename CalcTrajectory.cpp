@@ -140,6 +140,16 @@ std::string CalcTrajectory(
     unsigned int i = 0;
     std::string returnCode = "t_r_max";
 
+    // === Номер фазы ===
+    int phase = 0; // Начальная фаза для многофазного метода (0 = ЭВТ на виртуальную цель, 1 = Маршевый полет, 2 = Полет по "горке", 3 = Пикирование)
+
+    // === Критическое расстояние для пикирования ===
+    double r_crit_calc = calc_r_critical(s[i].v_r, s[i].v_c, MethodData.H_gorka, MethodData.k_dive, limits.n_ya_r_max);
+
+    // === Флаг для отсечения выныривания радиогоризонта ===
+    bool radar_horizon_ended = false;
+
+
     while (s[i].t < limits.t_r_max && i < N_max - 1)
     {
 
@@ -179,8 +189,101 @@ std::string CalcTrajectory(
         s[i].P_r    = P_val;
         s[i].mode1  = currentMode1;
 
+        // --- 4. Кинематика (для наведения) ---
+        //Расстояние между ракетой и целью, м
+        s[i].r_rc = r(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c, s[i].y_g_c);
+        //критическое расстояние между ракетой и целью для начала пикирования
+        double r_crit_calc = calc_r_critical(s[i].v_r, s[i].v_c, MethodData.H_gorka, MethodData.k_dive, limits.n_ya_r_max);
+        //Скорость изменения расстояния между ракетой и целью, м/с
+        s[i].dot_r_rc = dot_r(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c, s[i].y_g_c,
+                              s[i].v_r, s[i].v_c, s[i].Theta_r, s[i].Theta_c);
+        //Ускорение изменения расстояния между ракетой и целью, м/с^2
+        s[i].ddot_r_rc = ddot_r(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c, s[i].y_g_c,
+                                s[i].v_r, s[i].v_c, s[i].Theta_r, s[i].Theta_c,
+                                a_xa_r, a_ya_r, a_xa_c, a_ya_c);
+        //Угол наклона линии ракета-цель, рад
+        s[i].epsilon_rc = epsilon(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c, s[i].y_g_c);
+        //Угловая скорость линии ракета-цель, рад/с
+        s[i].dot_epsilon_rc = dot_epsilon(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c,
+                                          s[i].y_g_c, s[i].v_r, s[i].v_c, s[i].Theta_r, s[i].Theta_c);
+        //угловая скорость линии визирования ракета-виртуальная цель, рад/с
+        s[i].dot_epsilon_virt = dot_epsilon_virtual(
+            s[i].x_g_r, s[i].y_g_r,
+            s[i].x_g_c, s[i].y_g_c,
+            MethodData.delta_x_virt, 
+            s[i].v_r, s[i].v_c,
+            s[i].Theta_r, s[i].Theta_c
+        );
+        //Угловое ускорение линии ракета-цель, рад/с^2
+        s[i].ddot_epsilon_rc = ddot_epsilon(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c,
+                                            s[i].y_g_c, s[i].v_r, s[i].v_c, s[i].Theta_r, s[i].Theta_c,
+                                            a_xa_r, a_ya_r, a_xa_c, a_ya_c);
 
-        // --- 4. Наведение ---
+        //Расстояние между носителем и ракетой, м
+        s[i].r_nr = r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r, s[i].y_g_r);
+        //Скорость изменения расстояния между носителем и ракетой, м/с
+        s[i].dot_r_nr = dot_r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r, s[i].y_g_r,
+                              s[i].v_n, s[i].v_r, s[i].Theta_n, s[i].Theta_r);
+        //Ускорение изменения расстояния между носителем и ракетой, м/с^2
+        s[i].ddot_r_nr = ddot_r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r, s[i].y_g_r,
+                                s[i].v_n, s[i].v_r, s[i].Theta_n, s[i].Theta_r,
+                                a_xa_n, a_ya_n, a_xa_r, a_ya_r);
+        //Угол наклона линии носитель-ракета, рад
+        s[i].epsilon_nr = epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r, s[i].y_g_r);
+        //Угловая скорость линии носитель-ракета, рад/с
+        s[i].dot_epsilon_nr = dot_epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r,
+                                          s[i].y_g_r, s[i].v_n, s[i].v_r, s[i].Theta_n, s[i].Theta_r);
+        //Угловое ускорение линии носитель-ракета, рад/с^2
+        s[i].ddot_epsilon_nr = ddot_epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r,
+                                            s[i].y_g_r, s[i].v_n, s[i].v_r, s[i].Theta_n, s[i].Theta_r,
+                                            a_xa_n, a_ya_n, a_xa_r, a_ya_r);
+
+        //Расстояние между носителем и целью, м
+        s[i].r_nc = r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c, s[i].y_g_c);
+        //Скорость изменения расстояния между носителем и целью, м/с
+        s[i].dot_r_nc = dot_r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c, s[i].y_g_c,
+                              s[i].v_n, s[i].v_c, s[i].Theta_n, s[i].Theta_c);
+        //Ускорение изменения расстояния между носителем и целью, м/с^2
+        s[i].ddot_r_nc = ddot_r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c, s[i].y_g_c,
+                                s[i].v_n, s[i].v_c, s[i].Theta_n, s[i].Theta_c,
+                                a_xa_n, a_ya_n, a_xa_c, a_ya_c);
+        //Угол наклона линии носитель-цель, рад
+        s[i].epsilon_nc = epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c, s[i].y_g_c);
+        //Угловая скорость линии носитель-цель, рад/с
+        s[i].dot_epsilon_nc = dot_epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c,
+                                          s[i].y_g_c, s[i].v_n, s[i].v_c, s[i].Theta_n, s[i].Theta_c);
+        //Угловое ускорение линии носитель-цель, рад/с^2
+        s[i].ddot_epsilon_nc = ddot_epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c,
+                                            s[i].y_g_c, s[i].v_n, s[i].v_c, s[i].Theta_n, s[i].Theta_c,
+                                            a_xa_n, a_ya_n, a_xa_c, a_ya_c);
+
+        double y_bez_temp = calc_radar_horizon_boundary(
+            s[i].r_rc, 
+            MethodData.H_ant,    
+            MethodData.H_save,     
+            MethodData.H_march
+        );
+
+        // Если флаг уже true, значит мы уже под землей. Оставляем nullopt.
+        if (radar_horizon_ended)
+        {
+            s[i].y_radar_horizon = std::nullopt;
+        }
+        else
+        {
+            if (y_bez_temp <= 0.0)
+            {
+                radar_horizon_ended = true; // Запоминаем момент ухода под землю
+                s[i].y_radar_horizon = std::nullopt;
+            }
+            else
+            {
+                s[i].y_radar_horizon = y_bez_temp;
+            }
+        }
+
+
+        // --- 5. Наведение ---
 
         if (i >= 1)
         {
@@ -244,12 +347,20 @@ std::string CalcTrajectory(
 
             case GuidanceMethod::Gorka:
             {
-                double dTheta_r_prog = 0.0;
-                double h_prog_maneuver = 5000.0;   // 5 км до цели — начало манёвра
-                s[i].n_ya_r = n_ya_potr_Gorka(s[i].v_r, s[i].Theta_r, s[i].y_g_r, s[i].r_rc,
-                                              s[i].epsilon_rc, h_prog_maneuver, dTheta_r_prog);
-                if (std::abs(s[i].v_r) > 1e-6)
-                    s[i].dTheta_r_prog = dTheta_r_prog;
+                // ВЫЗОВ МНОГОФАЗНОЙ ФУНКЦИИ НАВЕДЕНИЯ
+                s[i].n_ya_r = n_ya_potr_TwoPhase(
+                    s[i].v_r, s[i].Theta_r,
+                    s[i].y_g_r,
+                    s[i].r_rc,
+                    s[i].epsilon_rc,
+                    s[i].v_c, s[i].Theta_c,
+                    s[i].dot_epsilon_virt, // Угловая скорость на виртуальную цель (посчитана выше)
+                    s[i].dot_epsilon_rc,      // Угловая скорость на реальную цель
+                    MethodData,
+                    phase,                    // Переменная фазы (передается по ссылке, будет меняться внутри)
+                    r_crit_calc,              // Критическое расстояние для пикирования (посчитано выше)
+                    limits.n_ya_r_max         // Максимальная допустимая перегрузка
+                );
                 break;
             }
 
@@ -268,66 +379,7 @@ std::string CalcTrajectory(
 
         }
 
-        // --- Кинематика (для наведения) ---
-        //Расстояние между ракетой и целью, м
-        s[i].r_rc = r(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c, s[i].y_g_c);
-        //Скорость изменения расстояния между ракетой и целью, м/с
-        s[i].dot_r_rc = dot_r(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c, s[i].y_g_c,
-                              s[i].v_r, s[i].v_c, s[i].Theta_r, s[i].Theta_c);
-        //Ускорение изменения расстояния между ракетой и целью, м/с^2
-        s[i].ddot_r_rc = ddot_r(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c, s[i].y_g_c,
-                                s[i].v_r, s[i].v_c, s[i].Theta_r, s[i].Theta_c,
-                                a_xa_r, a_ya_r, a_xa_c, a_ya_c);
-        //Угол наклона линии ракета-цель, рад
-        s[i].epsilon_rc = epsilon(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c, s[i].y_g_c);
-        //Угловая скорость линии ракета-цель, рад/с
-        s[i].dot_epsilon_rc = dot_epsilon(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c,
-                                          s[i].y_g_c, s[i].v_r, s[i].v_c, s[i].Theta_r, s[i].Theta_c);
-        //Угловое ускорение линии ракета-цель, рад/с^2
-        s[i].ddot_epsilon_rc = ddot_epsilon(s[i].x_g_r, s[i].y_g_r, s[i].x_g_c,
-                                            s[i].y_g_c, s[i].v_r, s[i].v_c, s[i].Theta_r, s[i].Theta_c,
-                                            a_xa_r, a_ya_r, a_xa_c, a_ya_c);
-
-        //Расстояние между носителем и ракетой, м
-        s[i].r_nr = r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r, s[i].y_g_r);
-        //Скорость изменения расстояния между носителем и ракетой, м/с
-        s[i].dot_r_nr = dot_r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r, s[i].y_g_r,
-                              s[i].v_n, s[i].v_r, s[i].Theta_n, s[i].Theta_r);
-        //Ускорение изменения расстояния между носителем и ракетой, м/с^2
-        s[i].ddot_r_nr = ddot_r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r, s[i].y_g_r,
-                                s[i].v_n, s[i].v_r, s[i].Theta_n, s[i].Theta_r,
-                                a_xa_n, a_ya_n, a_xa_r, a_ya_r);
-        //Угол наклона линии носитель-ракета, рад
-        s[i].epsilon_nr = epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r, s[i].y_g_r);
-        //Угловая скорость линии носитель-ракета, рад/с
-        s[i].dot_epsilon_nr = dot_epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r,
-                                          s[i].y_g_r, s[i].v_n, s[i].v_r, s[i].Theta_n, s[i].Theta_r);
-        //Угловое ускорение линии носитель-ракета, рад/с^2
-        s[i].ddot_epsilon_nr = ddot_epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_r,
-                                            s[i].y_g_r, s[i].v_n, s[i].v_r, s[i].Theta_n, s[i].Theta_r,
-                                            a_xa_n, a_ya_n, a_xa_r, a_ya_r);
-
-        //Расстояние между носителем и целью, м
-        s[i].r_nc = r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c, s[i].y_g_c);
-        //Скорость изменения расстояния между носителем и целью, м/с
-        s[i].dot_r_nc = dot_r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c, s[i].y_g_c,
-                              s[i].v_n, s[i].v_c, s[i].Theta_n, s[i].Theta_c);
-        //Ускорение изменения расстояния между носителем и целью, м/с^2
-        s[i].ddot_r_nc = ddot_r(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c, s[i].y_g_c,
-                                s[i].v_n, s[i].v_c, s[i].Theta_n, s[i].Theta_c,
-                                a_xa_n, a_ya_n, a_xa_c, a_ya_c);
-        //Угол наклона линии носитель-цель, рад
-        s[i].epsilon_nc = epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c, s[i].y_g_c);
-        //Угловая скорость линии носитель-цель, рад/с
-        s[i].dot_epsilon_nc = dot_epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c,
-                                          s[i].y_g_c, s[i].v_n, s[i].v_c, s[i].Theta_n, s[i].Theta_c);
-        //Угловое ускорение линии носитель-цель, рад/с^2
-        s[i].ddot_epsilon_nc = ddot_epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c,
-                                            s[i].y_g_c, s[i].v_n, s[i].v_c, s[i].Theta_n, s[i].Theta_c,
-                                            a_xa_n, a_ya_n, a_xa_c, a_ya_c);
-
-
-        // --- 5. Аэродинамика ---
+        // --- 6. Аэродинамика ---
         double alpha_r = 0.0;
         double delta_r = 0.0;
 
@@ -347,7 +399,7 @@ std::string CalcTrajectory(
         s[i].n_xa_r = (P_val * std::cos(alpha_r) - Xa_val) / (m_0 * g);
 
 
-        // --- 6. Проверки ---
+        // --- 7. Проверки ---
         if (std::abs(s[i].n_ya_r) > limits.n_ya_r_max)
         {
             returnCode = "n_ya_r_max";
@@ -409,11 +461,34 @@ std::string CalcTrajectory(
             break;
         }
 
+        if (s[i].v_r < 100.0)
+        {
+            returnCode = "v_r_min";
+            break;
+        }
+
+        if ((phase == 0 || phase == 1) && 
+            s[i].y_g_r < MethodData.H_march && 
+            s[i].y_radar_horizon != std::nullopt && 
+            s[i].y_g_r > s[i].y_radar_horizon)
+        {
+            returnCode = "radar_visibility";
+            break;
+        }
+
 
         if (s[i].r_rc < calc.r_por)
         {
-            returnCode = "0";
-            break;
+            if (s[i].v_r < 280.0)
+            {
+                returnCode = "v_r_destruct";
+                break;
+            }
+            else
+            {
+                returnCode = "0";
+                break;
+            }
         }
 
         // --- 2.4. Вычисление производных (правых частей системы диф.ур.) ---

@@ -1,4 +1,7 @@
 ﻿#pragma once
+#include <cmath>
+#include "DataStructs.h"
+#include "LibConstFunc.h"
 
 double n_ya_potr_PurePursuit(double dot_epsilon_rc, double v_r, double Theta_r);
 
