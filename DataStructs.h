@@ -178,9 +178,21 @@ struct RocketParams
     double m_oun;       // масса отсека управления и наведения
     double m_np;        // масса несущих поверхностей
     double d;           // диаметр, м
+    double m0_start;
     double m_pn() const { return m_bch + m_oun + m_np; }
     double l;           // длина ракеты
     double beta;
+    double rocket_length;
+    double mu;
+};
+
+struct ScenarioResult {
+    bool valid = false;
+    double max_range = 0.0;
+    double m0 = 0.0, mu = 0.0, beta = 0.0, eta = 0.0, Km = 0.0, Kp = 0.0, Kg = 0.0, k = 0.0;
+    double delta_x_virt = 0.0;
+    double v_impact = 0.0;   // скорость подлета к цели, м/с
+    double t_flight = 0.0;   // время полета
 };
 
 struct OptimizeResult {
@@ -189,7 +201,10 @@ struct OptimizeResult {
     double k = 0;
     double t_high = 0, r_high = 0;
     double t_low  = 0, r_low  = 0;
-    long int max_range = 0;
+    double max_range = 0;
     bool valid = false;
     long int rocket_length = 0.0;
+    double delta_x_virt = 0.0;   // Оптимальное смещение виртуальной цели
+    double t_gorka = 0.0;        // Время полёта по методу Gorka
+    double r_gorka = 0.0;        // Оставшаяся дальность после Gorka
 };

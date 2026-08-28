@@ -31,6 +31,5 @@ double n_ya_potr_TwoPhase(
     double dot_epsilon_rc,
     const GuidanceMethod_Data& mtd,
     int& phase,
-    double r_crit_calc,
     double n_ya_max
 );

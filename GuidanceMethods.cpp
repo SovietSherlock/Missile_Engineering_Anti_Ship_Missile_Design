@@ -1,4 +1,5 @@
 ﻿#include "GuidanceMethods.h"
+#include "KinematicFunc2D.h"
 
 #include <cmath>
 
@@ -79,7 +80,6 @@ double n_ya_potr_TwoPhase(
     double dot_epsilon_rc,
     const GuidanceMethod_Data& mtd,
     int& phase,
-    double r_crit_calc,
     double n_ya_max)
 {
     // ========================================================================
@@ -147,6 +147,19 @@ double n_ya_potr_TwoPhase(
     // ========================================================================
     if (phase == 2)
     {
+        double r_crit_calc = calc_r_critical(
+            v_r, v_c,
+            mtd.H_gorka,
+            mtd.k_dive,
+            n_ya_max
+        );
+
+        // УСЛОВИЕ ПЕРЕХОДА: достигли критического расстояния для пикирования
+        if (r_rc <= r_crit_calc && r_crit_calc > 0.0|| r_rc < 750.0)
+        {
+            phase = 3;  
+        }
+        
         double n_ya = n_ya_potr_GorkaClimb(
             v_r, Theta_r,
             y_g_r,
@@ -154,18 +167,10 @@ double n_ya_potr_TwoPhase(
             mtd.K_H_gorka,
             mtd.K_v_gorka
         );
-
-        // УСЛОВИЕ ПЕРЕХОДА: достигли критического расстояния для пикирования
-        if (r_rc <= r_crit_calc && r_crit_calc > 0.0)
-        {
-            return n_ya_potr_Proportional(mtd.k_dive, dot_epsilon_rc, v_r, Theta_r);  // переходим к пикированию
-        }
-        
         //Условие непревышения максималльной перегрузки на подъеме на высоту горки
         if (n_ya >= n_ya_max)      return n_ya_max;
         if (n_ya <= -n_ya_max)     return -n_ya_max;
         return n_ya;
-
     }
 
     // ========================================================================
@@ -175,7 +180,4 @@ double n_ya_potr_TwoPhase(
     {
         return n_ya_potr_Proportional(mtd.k_dive, dot_epsilon_rc, v_r, Theta_r);
     }
-
-    // Защита от выхода за пределы (если phase не 0-4)
-    return 0.0;
 }

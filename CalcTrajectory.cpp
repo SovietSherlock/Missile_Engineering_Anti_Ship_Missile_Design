@@ -149,6 +149,9 @@ std::string CalcTrajectory(
     // === Флаг для отсечения выныривания радиогоризонта ===
     bool radar_horizon_ended = false;
 
+    // === Флаг отсечения учета колебаний траектории на маршевой высоте ==
+    bool reached_march = false;
+
 
     while (s[i].t < limits.t_r_max && i < N_max - 1)
     {
@@ -256,6 +259,12 @@ std::string CalcTrajectory(
         s[i].ddot_epsilon_nc = ddot_epsilon(s[i].x_g_n, s[i].y_g_n, s[i].x_g_c,
                                             s[i].y_g_c, s[i].v_n, s[i].v_c, s[i].Theta_n, s[i].Theta_c,
                                             a_xa_n, a_ya_n, a_xa_c, a_ya_c);
+        //Критическое расстояние пикирования для многофазной траетории, м
+        r_crit_calc = calc_r_critical(
+                    s[i].v_r, s[i].v_c,
+                    MethodData.H_gorka,
+                    MethodData.k_dive,
+                    limits.n_ya_r_max);
 
         double y_bez_temp = calc_radar_horizon_boundary(
             s[i].r_rc, 
@@ -357,10 +366,12 @@ std::string CalcTrajectory(
                     s[i].dot_epsilon_virt, // Угловая скорость на виртуальную цель (посчитана выше)
                     s[i].dot_epsilon_rc,      // Угловая скорость на реальную цель
                     MethodData,
-                    phase,                    // Переменная фазы (передается по ссылке, будет меняться внутри)
-                    r_crit_calc,              // Критическое расстояние для пикирования (посчитано выше)
+                    phase,                    // Переменная фазы (передается по ссылке, будет меняться внутри)              // Критическое расстояние для пикирования (посчитано выше)
                     limits.n_ya_r_max         // Максимальная допустимая перегрузка
                 );
+
+                // std::cout << ", r_crit_calc=" << r_crit_calc;
+                // std::cout << ", r_rc=" << s[i].r_rc;
                 break;
             }
 
@@ -461,20 +472,20 @@ std::string CalcTrajectory(
             break;
         }
 
-        if (s[i].v_r < 100.0)
+        if (s[i].v_r < 119.0)
         {
             returnCode = "v_r_min";
             break;
         }
 
-        if ((phase == 0 || phase == 1) && 
-            s[i].y_g_r < MethodData.H_march && 
-            s[i].y_radar_horizon != std::nullopt && 
-            s[i].y_g_r > s[i].y_radar_horizon)
-        {
-            returnCode = "radar_visibility";
-            break;
-        }
+        // // Проверка радиотени (только до первого касания маршевой высоты)
+        // if (MethodData.Method == GuidanceMethod::Gorka && !reached_march && 
+        //     s[i].y_radar_horizon != std::nullopt && 
+        //     s[i].y_g_r > s[i].y_radar_horizon)
+        // {
+        //     returnCode = "radar_visibility";
+        //     break;
+        // }
 
 
         if (s[i].r_rc < calc.r_por)
