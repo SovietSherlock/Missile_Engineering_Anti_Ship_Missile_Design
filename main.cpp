@@ -496,7 +496,7 @@ OptimizeResult optimize_max_range_parallel(
 
     // === СЕТКА ПАРАМЕТРОВ ===
     std::vector<double> mu_vals;
-    for (double mu = 0.55; mu <= 0.6501; mu += 0.01)
+    for (double mu = 0.44; mu <= 0.6501; mu += 0.01)
         mu_vals.push_back(mu);
 
     std::vector<double> eta_vals = {6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0};
@@ -758,7 +758,7 @@ int main()
     init_high.Theta_n0 = 0.0;
     init_high.v_r0 = 270.0;
     init_high.Theta_r0 = std::nan("");
-    init_high.x_g_c0 = 860000.0; // ИЗМЕНИТЬ
+    init_high.x_g_c0 = 1040000.0; // ИЗМЕНИТЬ
     init_high.y_g_c0 = 0.0;
     init_high.v_c0 = 18.0 * 0.514444;
     init_high.Theta_c0 = M_PI;
@@ -801,7 +801,7 @@ int main()
     double eta = 6.0; // ИЗМЕНИТЬ
     double Km = 5.0; // ИЗМЕНИТЬ
     double Kp = 0.25; // ИЗМЕНИТЬ
-    double Kg = 1.9; // ИЗМЕНИТЬ
+    double Kg = 1.5; // ИЗМЕНИТЬ
     double k = 5.0; // ИЗМЕНИТЬ
 
     // ===  ОПТИМИЗАЦИЯ GORKA С ПЕРЕБОРОМ ДАЛЬНОСТЕЙ ===
